@@ -1,0 +1,9 @@
+[
+	{
+		"name": "Example Server",
+		"host": "example.com",
+		"user": "username",
+		"password": "some_password",
+		"directory": "/path/to/dir"
+	}
+]

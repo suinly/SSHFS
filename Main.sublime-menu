@@ -1,0 +1,20 @@
+[
+	{
+		"id": "SSHFS",
+		"caption": "SSHFS",
+		"children": [
+			{
+				"caption": "Edit Servers",
+				"command": "ssh_fs_edit_servers"
+			},
+			{
+				"caption": "Mount Server",
+				"command": "ssh_fs_mount"
+			},
+			{
+				"caption": "Umount Server",
+				"command": "ssh_fs_umount"
+			}
+		]
+	}
+]

@@ -1,0 +1,16 @@
+[
+	{
+		"caption": "SSHFS: Mount Server",
+		"command": "ssh_fs_mount"
+	},
+
+	{
+		"caption": "SSHFS: Umount Server",
+		"command": "ssh_fs_umount"
+	},
+
+	{
+		"caption": "SSHFS: Edit Servers",
+		"command": "ssh_fs_edit_servers"
+	}
+]
