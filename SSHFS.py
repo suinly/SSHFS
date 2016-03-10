@@ -1,101 +1,151 @@
-import os, json
+import os, json, time, hashlib
 import sublime, sublime_plugin
 from os import system
 
-PLUGIN_NAME     = "SSHFS"
-PLUGIN_PATH     = sublime.packages_path() + '/' + PLUGIN_NAME
-MOUNT_DIR       = PLUGIN_PATH + "/mnt/"
-SERVERS_CONFIG  = PLUGIN_PATH + '/Servers.sublime-settings'
+class BaseSshFsCommand(sublime_plugin.WindowCommand):
+    MSG_FAILED_MOUNT    = "Failed to mount server: "
+    MSG_FAILED_UMOUNT   = "Failed to umount server: "
+    MSG_SSHFS_NOT_ISSET = "Command sshfs not found in your system!\n"\
+                          "Please use command for Ubuntu/Debian: apt-get install sshfs\n"\
+                          "Or other command for your distribution"
+    NOT_FOUND_MOUNT_SERVERS = "Mounted servers not found, its OK"
 
-# plugin loaded event
-def plugin_loaded():
-    if not os.path.exists(MOUNT_DIR):
-        os.makedirs(MOUNT_DIR)
+    def run(self):
+        if not self.sshfs_isset():
+            sublime.error_message(self.MSG_SSHFS_NOT_ISSET)
+            return False
 
-# return dict with servers and configs
-def servers_load():
-    with open(SERVERS_CONFIG) as data:
-        return json.load(data)
+        self.PLUGIN_NAME     = "SSHFS"
+        self.PLUGIN_PATH     = sublime.packages_path() + '/' + self.PLUGIN_NAME
+        self.MOUNT_DIR       = self.PLUGIN_PATH + "/mnt/"
+        self.SERVERS_CONFIG  = self.PLUGIN_PATH + '/Servers.sublime-settings'
+        self.DEBUG           = True
 
-# return path to mount dir for server
-def get_mount_dir(server):
-    return MOUNT_DIR + server['user'] + '@' + server['host'] + '_' + server['name']
+        self.check_mount_dir()
+        self.servers = self.servers_load()
 
-# mount sshfs and open dir with files
-def sshfs_mount(server):
-    mount_directory = get_mount_dir(server)
+    def logger(self, message):
+        if self.DEBUG:
+            print("[SSHFS] %s" % message)
+        else:
+            return False
 
-    if not os.path.exists(mount_directory):
-        os.makedirs(mount_directory)
+    # check sshfs bin
+    def sshfs_isset(self):
+        result = system('sshfs -V')
+        return not result
 
-    result = system(
-        "echo '%s' | sshfs -o password_stdin %s@%s:%s '%s'" % (
+    # check and create if not exists mount dir
+    def check_mount_dir(self):
+        if not os.path.exists(self.MOUNT_DIR):
+            os.makedirs(self.MOUNT_DIR)
+
+    # load servers list from config
+    def servers_load(self):
+        with open(self.SERVERS_CONFIG) as data:
+            return json.load(data)
+
+    # return path to mount dir for server
+    def get_mount_dir(self, server):
+        dir_name = "%s_%s_%s" % (server['name'], server['user'], server['host'])
+        return self.MOUNT_DIR + dir_name + "/"
+
+    # mount sshfs and open dir with files
+    def sshfs_mount(self, server):
+        mount_directory = self.get_mount_dir(server)
+
+        if not os.path.exists(mount_directory):
+            os.makedirs(mount_directory)
+
+        command = "echo '%s' | sshfs -o password_stdin %s@%s:%s '%s'" % (
             server['password'], 
             server['user'], 
             server['host'], 
             server['directory'], 
             mount_directory
         )
-    )
 
-    if not result:
-        call(["subl", mount_directory])
-    else:
-        sublime.error_message('Failed to mount directory: ' + mount_directory)
+        result = system(command)
 
-    return not result
+        self.logger(command)
 
-# umount sshfs directory
-def sshfs_umount(server):   
-    mount_directory = get_mount_dir(server)
-    result = system("fusermount -u %s" % mount_directory)
+        if not result:
+            system("subl " + mount_directory)
+        else:
+            sublime.error_message(self.MSG_FAILED_MOUNT + server['name'])
 
-    if result:
-        sublime.error_message('Failed to umount directory: ' + mount_directory)
+        return not result
 
-    return not result
+    # check data and run sshfs_mount function
+    def connect_to_server(self, id):
+        if id < 0:
+            return False
 
-# check data and run sshfs_mount function
-def connect_to_server(id):
-    if id < 0:
-        return False
+        servers = self.servers_load()
+        return self.sshfs_mount(servers[id])
 
-    servers = servers_load()
-    print("Connect to server: " + servers[id]['name'])
-    return sshfs_mount(servers[id])
+    # return servers list
+    def servers_list(self):
+        items = []
+        servers = self.servers_load()
+        for server in servers:
+            items.append("%s: %s@%s" % (server['name'], server['user'], server['host']))
 
-# check data and run sshfs_umount function
-def disconnect_server(id):
-    if id < 0:
-        return False
+        return items
 
-    servers = servers_load()
-    return sshfs_umount(servers[id])
+    def servers_mount_list(self):
+        items = []
+        servers = self.servers_load()
+
+        for server in servers:
+            if os.path.exists(self.get_mount_dir(server)):
+                items.append("* %s: %s@%s" % (server['name'], server['user'], server['host']))
+            else:
+                items.append("%s: %s@%s" % (server['name'], server['user'], server['host']))
+
+
+        return items
+
+    # check data and run sshfs_umount function
+    def disconnect_server(self, id):
+        if id < 0:
+            return False
+
+        servers = self.servers_load()
+        return self.sshfs_umount(servers[id])
+
+    # umount sshfs directory
+    def sshfs_umount(self, server):   
+        mount_directory = self.get_mount_dir(server)
+        command = "fusermount -uz %s" % mount_directory
+        result = system(command)
+
+        self.logger(command)
+
+        if result:
+            sublime.error_message(self.MSG_FAILED_UMOUNT + server['name'])
+        else:
+            os.rmdir(mount_directory)
+
+        return not result
 
 # sublime command
 # open servers list for mount
-class SshFsMountCommand(sublime_plugin.WindowCommand):
+class SshFsMountCommand(BaseSshFsCommand):
     def run(self):
-        items = []
-        servers = servers_load()
-        for server in servers:
-            items.append(server['name'] + ': ' + server['user'] + '@' + server['host'])
-
-        self.window.show_quick_panel(items, connect_to_server)
+        super(SshFsMountCommand, self).run()
+        self.window.show_quick_panel(self.servers_list(), self.connect_to_server)
 
 # sublime command
 # open servers list for umount
-class SshFsUmountCommand(sublime_plugin.WindowCommand):
+class SshFsUmountCommand(BaseSshFsCommand):
     def run(self):
-        items = []
-        servers = servers_load()
-        for server in servers:
-            items.append(server['name'] + ': ' + server['user'] + '@' + server['host'])
-
-        self.window.show_quick_panel(items, disconnect_server)
+        super(SshFsUmountCommand, self).run()
+        self.window.show_quick_panel(self.servers_mount_list(), self.disconnect_server)    
 
 # sublime command
 # open json file with servers configuration
-class SshFsEditServersCommand(sublime_plugin.WindowCommand):
+class SshFsEditServersCommand(BaseSshFsCommand):
     def run(self):
-        self.window.open_file(SERVERS_CONFIG)
+        super(SshFsEditServersCommand, self).run()
+        self.window.open_file(self.SERVERS_CONFIG)
