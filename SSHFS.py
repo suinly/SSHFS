@@ -70,7 +70,7 @@ class BaseSshFsCommand(sublime_plugin.WindowCommand):
         self.logger(command)
 
         if not result:
-            system("subl " + mount_directory)
+            system("subl '%s'" % mount_directory)
         else:
             sublime.error_message(self.MSG_FAILED_MOUNT + server['name'])
 
@@ -117,7 +117,7 @@ class BaseSshFsCommand(sublime_plugin.WindowCommand):
     # umount sshfs directory
     def sshfs_umount(self, server):   
         mount_directory = self.get_mount_dir(server)
-        command = "fusermount -uz %s" % mount_directory
+        command = "fusermount -uz '%s'" % mount_directory
         result = system(command)
 
         self.logger(command)
