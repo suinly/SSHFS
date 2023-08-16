@@ -57,7 +57,8 @@ class BaseSshFsCommand(sublime_plugin.WindowCommand):
         if not os.path.exists(mount_directory):
             os.makedirs(mount_directory)
 
-        command = "echo '%s' | sshfs -o password_stdin %s@%s:%s '%s'" % (
+        command = "echo '%s' | sshfs -p %s -o password_stdin %s@%s:%s '%s'" % (
+            server.get('port',22),
             server['password'], 
             server['user'], 
             server['host'], 
